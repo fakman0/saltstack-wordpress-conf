@@ -148,9 +148,8 @@ create_backup_dir:
     - mode: 755
     - makedirs: True
 
-database_backup:
-  file.managed:
-    - name: /etc/cron.d/database_backup
-    - contents: 0 2 * * * mysqldump --no-tablespaces -u {{ data['dbuser_username'] }} -p"{{ data['dbuser_password'] }}" {{ data['database_name'] }} > backup/kartaca_wordpressdb_`date +"%Y-%m-%d"`.sql
+create_cron:
+  cmd.run:
+    - name: echo "0 2 * * * mysqldump --no-tablespaces -u {{ data['dbuser_username'] }} -p"{{ data['dbuser_password'] }}" {{ data['database_name'] }} > /backup/kartaca_wordpressdb.sql" | crontab -
 
 {% endif %}
