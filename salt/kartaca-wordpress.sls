@@ -1,5 +1,8 @@
 {% set data = pillar.get('kartaca-pillar', {}) %}
 
+{% set ubuntu22ip = salt['mine.get']('ubuntu22', 'network.ip_addrs') %}
+{% set centos9ip = salt['mine.get']('centos9', 'network.ip_addrs') %}
+
 kartaca_group:
   group.present:
     - gid: 2024
@@ -91,6 +94,7 @@ install_php_nginx:
   pkg.installed:
     - pkgs:
       - yum-utils
+      - zip
       - nginx
       - php
       - php-fpm
@@ -102,6 +106,65 @@ install_php_nginx:
 nginx:
   service.running:
     - enable: True
+
+php-fpm:
+  service.running:
+    - enable: True
+
+/tmp/wordpress_salt.sh:
+  file.managed:
+    - source: salt://files/wordpress_salt.sh
+
+download_wordpress:
+  cmd.run:
+    - name: "wget -P /tmp https://wordpress.org/latest.zip && 
+    unzip /tmp/latest.zip -d /var/www &&
+    mv /var/www/wordpress /var/www/wordpress2024 &&
+    mv /var/www/wordpress2024/wp-config-sample.php /var/www/wordpress2024/wp-config.php &&
+    bash /tmp/wordpress_salt.sh &&
+    sed -i \"s/define( 'DB_NAME',.*);/define( 'DB_NAME', '{{ data['database_name'] }}' );/g\" /var/www/wordpress2024/wp-config.php &&
+    sed -i \"s/define( 'DB_USER',.*);/define( 'DB_USER', '{{ data['dbuser_username'] }}' );/g\" /var/www/wordpress2024/wp-config.php &&
+    sed -i \"s/define( 'DB_PASSWORD',.*);/define( 'DB_PASSWORD', '{{ data['dbuser_password'] }}' );/g\" /var/www/wordpress2024/wp-config.php &&
+    sed -i \"s/define( 'DB_HOST',.*);/define( 'DB_HOST', '{{ ubuntu22ip['ubuntu22'][0] }}' );/g\" /var/www/wordpress2024/wp-config.php"
+    - unless: "test -e /var/www/wordpress2024"
+
+/etc/nginx/nginx.conf:
+  file.managed:
+    - source: salt://nginx.conf
+    - user: root
+    - group: root
+    - mode: 644
+
+/etc/nginx/conf.d/wordpress2024.conf:
+  file.managed:
+    - source: salt://files/wordpress2024.conf
+    - user: root
+    - group: root
+    - mode: 644
+
+nginx_reload:
+  cmd.run:
+    - name: systemctl reload nginx
+    - watch:
+      - file: /etc/nginx/nginx.conf
+
+/etc/logrotate.d/nginx:
+  file.managed:
+    - source: salt://files/logrotate_nginx.conf
+    - user: root
+    - group: root
+    - mode: '0644'
+
+nginx_cron:
+  cmd.run:
+    - name: "echo \"0 0 1 * * systemctl restart nginx\" >> /tmp/nginxcron &&
+    echo \"0 * * * * /usr/sbin/logrotate -f /etc/logrotate.d/nginx\" >> /tmp/nginxcron &&
+    crontab /tmp/nginxcron &&
+    rm -rf /tmp/nginxcron"
+
+selinuxconf_for_mysql:
+  cmd.run:
+    - name: "setsebool -P httpd_can_network_connect_db 1"
 
 {% elif grains['id'] == 'ubuntu22' %}
 
@@ -119,7 +182,6 @@ mysql_dependence:
   cmd.run:
     - name: "salt-pip install PyMYSQL"
 
-
 mysql:
   service.running:
     - enable: True
@@ -127,18 +189,18 @@ mysql:
 {{ data['database_name'] }}:
   mysql_database.present
 
-
 {{ data['dbuser_username'] }}:
   mysql_user.present:
-    - host: localhost
+    - host: {{ centos9ip['centos9'][0] }}
     - password: "{{ data['dbuser_password'] }}"
     - connection_charset: utf8
 
 grantdb:
   mysql_grants.present:
-    - grant: all privileges
+    - grant: CREATE, ALTER, DROP, INSERT, UPDATE, DELETE, SELECT, REFERENCES, INDEX
     - database: {{ data['database_name'] }}.*
     - user: "{{ data['dbuser_username'] }}"
+    - host: {{ centos9ip['centos9'][0] }}
 
 create_backup_dir:
   file.directory:
