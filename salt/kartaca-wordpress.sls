@@ -1,12 +1,19 @@
 {% set data = pillar.get('kartaca-pillar', {}) %}
+{% set ubuntu22ip = salt['mine.get']('ubuntu22', 'internal_ip_addrs') %}
+{% set centos9ip = salt['mine.get']('centos9', 'internal_ip_addrs') %}
 
-{% set ubuntu22ip = salt['mine.get']('ubuntu22', 'network.ip_addrs') %}
-{% set centos9ip = salt['mine.get']('centos9', 'network.ip_addrs') %}
+{#########################################}
+{#########################################}
+{### ubuntu22 and centos9 common tasks ###}
+{#########################################}
+{#########################################}
 
+{# Creates the "kartaca_group" group with group id 2024. #}
 kartaca_group:
   group.present:
     - gid: 2024
 
+{# Creates a user named Kartaca with user and group ID 2024, home directory /home/krt, default shell /bin/bash, password kartaca2024 and defines sudo authority. #}
 create_user:
   user.present:
     - name: kartaca
@@ -24,6 +31,7 @@ create_user:
         - sudo
      {% endif %}
 
+{# Defines the permission to use the package manager without a password. #}
 /etc/sudoers.d/kartaca_roles:
   file.managed:
     - name: /etc/sudoers.d/kartaca_roles
@@ -33,18 +41,21 @@ create_user:
     - contents: "kartaca ALL=(ALL) NOPASSWD: /usr/bin/apt"
   {% endif %}
 
+{# Sets the time zone "Europe/Istanbul". #}
 set_timezone:
   cmd.run:
     - name: timedatectl set-timezone Europe/Istanbul
     - user: root
     - timeout: 60
 
+{# Activates ip forwarding permanently. #}
 enable_ip_forwarding:
   sysctl.present:
     - name: net.ipv4.ip_forward
     - value: 1
     - config: /etc/sysctl.conf
 
+{# Installs the necessary packages. #}
 install_tools:
   pkg.installed:
     - names:
@@ -66,6 +77,7 @@ install_tools:
       - mtr
 {% endif %}
 
+{# Installs terraform version 1.6.4 #}
 hashicorp_repo:
   cmd.run:
     {% if grains['id'] == 'centos9' %}
@@ -80,6 +92,7 @@ hashicorp_repo:
     apt install terraform=1.6.4-1 -y"
 {% endif %}
 
+{# Assigns the address "kartaca.local" to all addresses at the IP address "192.168.168.128/28" in the host file. #}
 update_hosts_file:
   file.append:
     - name: /etc/hosts
@@ -89,11 +102,19 @@ update_hosts_file:
         {% endfor %}
     - unless: salt '*' file.grep text="192.168.168.129 kartaca.local"
 
+{#########################################}
+{#########################################}
+{###           centos9 tasks           ###}
+{#########################################}
+{#########################################}
 {% if grains['id'] == 'centos9' %}
+
+{# Installs the necessary packages. #}
 install_php_nginx:
   pkg.installed:
     - pkgs:
       - yum-utils
+      - ed
       - zip
       - nginx
       - php
@@ -103,18 +124,23 @@ install_php_nginx:
       - php-intl
       - php-xml
 
+{# Activates nginx service. #}
 nginx:
   service.running:
     - enable: True
 
+{# Activates php-fpm service. #}
 php-fpm:
   service.running:
     - enable: True
 
+{# Copies the "wordpress_salt.sh" file to the minion server. #}
 /tmp/wordpress_salt.sh:
   file.managed:
     - source: salt://files/wordpress_salt.sh
 
+{# Downloads the wordpress file and extracts it to the www directory, changing the directory name to wordpress 2024. #}
+{# Enters remote mysql database information into the "wp-config.php" file. #}
 download_wordpress:
   cmd.run:
     - name: "wget -P /tmp https://wordpress.org/latest.zip && 
@@ -128,6 +154,7 @@ download_wordpress:
     sed -i \"s/define( 'DB_HOST',.*);/define( 'DB_HOST', '{{ ubuntu22ip['ubuntu22'][0] }}' );/g\" /var/www/wordpress2024/wp-config.php"
     - unless: "test -e /var/www/wordpress2024"
 
+{# Copies the "nginx.conf" file to the minion. #}
 /etc/nginx/nginx.conf:
   file.managed:
     - source: salt://nginx.conf
@@ -135,6 +162,14 @@ download_wordpress:
     - group: root
     - mode: 644
 
+{# Creates a "self-signed SSL certificate". #}
+create_ssl:
+  cmd.run:
+    - name: "mkdir /etc/nginx/ssl &&
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/nginx.key -out /etc/nginx/ssl/nginx.crt -subj '/C=TR/ST=Istanbul/L=Istanbul/O=Kartaca/OU=IT Department/CN=www.example.com'"
+    - unless: test -e /etc/nginx/ssl
+
+{# Copies the "wordpress2024.conf" file to the minion. #}
 /etc/nginx/conf.d/wordpress2024.conf:
   file.managed:
     - source: salt://files/wordpress2024.conf
@@ -142,12 +177,14 @@ download_wordpress:
     - group: root
     - mode: 644
 
+{# Observes the changes in the "nginx.conf" file and reloads the file if it detects a change. #}
 nginx_reload:
   cmd.run:
     - name: systemctl reload nginx
     - watch:
       - file: /etc/nginx/nginx.conf
 
+{# "logrotate" copies the configuration file to the minion. #}
 /etc/logrotate.d/nginx:
   file.managed:
     - source: salt://files/logrotate_nginx.conf
@@ -155,6 +192,8 @@ nginx_reload:
     - group: root
     - mode: '0644'
 
+{# Creates a cron task that will stop and restart the Nginx service on the first of each month. #}
+{# "logrotate" adds the task to the cron task to run. #}
 nginx_cron:
   cmd.run:
     - name: "echo \"0 0 1 * * systemctl restart nginx\" >> /tmp/nginxcron &&
@@ -162,39 +201,50 @@ nginx_cron:
     crontab /tmp/nginxcron &&
     rm -rf /tmp/nginxcron"
 
+{# Allows editing of the "SELinux" configuration to allow connections. #}
 selinuxconf_for_mysql:
   cmd.run:
-    - name: "setsebool -P httpd_can_network_connect_db 1"
+    - name: "setsebool -P httpd_can_network_connect_db 1 &&
+    setsebool -P httpd_can_network_connect 1"
 
+{#########################################}
+{#########################################}
+{###          ubuntu22 tasks           ###}
+{#########################################}
+{#########################################}
 {% elif grains['id'] == 'ubuntu22' %}
 
+{# Installs the necessary packages. #}
 install_mysql:
   pkg.installed:
     - pkgs:
       - mysql-server
-      - python3-pip
-      - python3-dev
       - default-libmysqlclient-dev
       - build-essential
       - pkg-config
 
+{# Installs the necessary package for the salt mysql module. #}
 mysql_dependence:
   cmd.run:
     - name: "salt-pip install PyMYSQL"
 
+{# Activates mysql service. #}
 mysql:
   service.running:
     - enable: True
 
+{# Creates database. #}
 {{ data['database_name'] }}:
   mysql_database.present
 
+{# Creates database userç #}
 {{ data['dbuser_username'] }}:
   mysql_user.present:
     - host: {{ centos9ip['centos9'][0] }}
     - password: "{{ data['dbuser_password'] }}"
     - connection_charset: utf8
 
+{# Defines the necessary permissions to the user on the database. #}
 grantdb:
   mysql_grants.present:
     - grant: CREATE, ALTER, DROP, INSERT, UPDATE, DELETE, SELECT, REFERENCES, INDEX
@@ -202,6 +252,13 @@ grantdb:
     - user: "{{ data['dbuser_username'] }}"
     - host: {{ centos9ip['centos9'][0] }}
 
+{# Makes mysql open to remote connections. #}
+open_mysql_remote_conn:
+  cmd.run:
+    - name: "sed -i \"s/^bind-address.*/#bind-address = 127.0.0.1/g\" /etc/mysql/mysql.conf.d/mysqld.cnf &&
+    systemctl restart mysql"
+
+{# Creates the directory where the Mysql database will be backed up. #}
 create_backup_dir:
   file.directory:
     - name: /backup
@@ -210,6 +267,7 @@ create_backup_dir:
     - mode: 755
     - makedirs: True
 
+{# It creates a cron task that takes a mysql backup every night at 2am. #}
 create_cron:
   cmd.run:
     - name: echo "0 2 * * * mysqldump --no-tablespaces -u {{ data['dbuser_username'] }} -p"{{ data['dbuser_password'] }}" {{ data['database_name'] }} > /backup/kartaca_wordpressdb.sql" | crontab -

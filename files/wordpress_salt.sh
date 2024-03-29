@@ -1,12 +1,12 @@
-sed -i "s/define( 'AUTH_KEY',.*);/ /g" /var/www/wordpress2024/wp-config.php
-sed -i "s/define( 'SECURE_AUTH_KEY',.*);/ /g" /var/www/wordpress2024/wp-config.php
-sed -i "s/define( 'LOGGED_IN_KEY',.*);/ /g" /var/www/wordpress2024/wp-config.php
-sed -i "s/define( 'NONCE_KEY',.*);/ /g" /var/www/wordpress2024/wp-config.php
-sed -i "s/define( 'AUTH_SALT',.*);/ /g" /var/www/wordpress2024/wp-config.php
-sed -i "s/define( 'SECURE_AUTH_SALT',.*);/ /g" /var/www/wordpress2024/wp-config.php
-sed -i "s/define( 'LOGGED_IN_SALT',.*);/ /g" /var/www/wordpress2024/wp-config.php
-sed -i "s/define( 'NONCE_SALT',.*);/ /g" /var/www/wordpress2024/wp-config.php
+#!/bin/sh
 
-echo "" >> /var/www/wordpress2024/wp-config.php
-echo "/** Authentication unique keys and salts.*/" >> /var/www/wordpress2024/wp-config.php
-curl -s https://api.wordpress.org/secret-key/1.1/salt/ >> /var/www/wordpress2024/wp-config.php
+# wordpress automatically pulls the salts and places them in the "wp-config.php" file.
+SALT=$(curl -L https://api.wordpress.org/secret-key/1.1/salt/)
+STRING='put your unique phrase here'
+printf '%s\n' "g/$STRING/d" a "$SALT" . w | ed -s /var/www/wordpress2024/wp-config.php
+
+# It allows installation operations by WordPress servers.
+echo "define( 'FS_METHOD', 'direct' );" >> /var/www/wordpress2024/wp-config.php
+
+# The directory needs full permissions to add a new plugin
+chmod -R 777 /var/www/wordpress2024/wp-content/plugins
