@@ -83,6 +83,7 @@ hashicorp_repo:
     {% if grains['id'] == 'centos9' %}
     - name: "wget -O- https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo | sudo tee /etc/yum.repos.d/hashicorp.repo &&
     yum install terraform-1.6.4 -y"
+    - unless: 'which terraform'
     {% elif grains['id'] == 'ubuntu22' %}
     - name: "rm -rf /usr/share/keyrings/hashicorp-archive-keyring.gpg &&
     wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg &&
@@ -90,6 +91,7 @@ hashicorp_repo:
     echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main\" | sudo tee /etc/apt/sources.list.d/hashicorp.list &&
     sudo apt update &&
     apt install terraform=1.6.4-1 -y"
+    - unless: 'which terraform'
 {% endif %}
 
 {# Assigns the address "kartaca.local" to all addresses at the IP address "192.168.168.128/28" in the host file. #}
@@ -266,6 +268,7 @@ create_backup_dir:
     - group: root
     - mode: 755
     - makedirs: True
+    - unless: "test -e /backup"
 
 {# It creates a cron task that takes a mysql backup every night at 2am. #}
 create_cron:
