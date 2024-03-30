@@ -9,4 +9,4 @@ printf '%s\n' "g/$STRING/d" a "$SALT" . w | ed -s /var/www/wordpress2024/wp-conf
 echo "define( 'FS_METHOD', 'direct' );" >> /var/www/wordpress2024/wp-config.php
 
 # The directory needs full permissions to add a new plugin
-chmod -R 777 /var/www/wordpress2024/wp-content/plugins
+chmod -R 777 /var/www/wordpress2024/wp-content
