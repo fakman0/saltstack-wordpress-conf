@@ -239,20 +239,37 @@ mysql:
 {{ data['database_name'] }}:
   mysql_database.present
 
-{# Creates database userç #}
+{# Creates database user for remote connections. #}
 {{ data['dbuser_username'] }}:
   mysql_user.present:
     - host: {{ centos9ip['centos9'][0] }}
     - password: "{{ data['dbuser_password'] }}"
     - connection_charset: utf8
 
-{# Defines the necessary permissions to the user on the database. #}
+{# Creates database user for local connections. #}
+{{ data['dblocal_username'] }}:
+  mysql_user.present:
+    - host: localhost
+    - password: "{{ data['dblocal_password'] }}"
+    - connection_charset: utf8
+
+
+{# Defines the necessary permissions to the remote_user on the database. #}
 grantdb:
   mysql_grants.present:
-    - grant: CREATE, ALTER, DROP, INSERT, UPDATE, DELETE, SELECT, REFERENCES, INDEX
+    - grant: all privileges
     - database: {{ data['database_name'] }}.*
     - user: "{{ data['dbuser_username'] }}"
     - host: {{ centos9ip['centos9'][0] }}
+
+{# Defines the necessary permissions to the local_user on the database. #}
+grant_local_db:
+  mysql_grants.present:
+    - grant: SELECT, LOCK TABLES
+    - database: {{ data['database_name'] }}.*
+    - user: "{{ data['dblocal_username'] }}"
+    - host: localhost
+
 
 {# Makes mysql open to remote connections. #}
 open_mysql_remote_conn:
@@ -273,6 +290,6 @@ create_backup_dir:
 {# It creates a cron task that takes a mysql backup every night at 2am. #}
 create_cron:
   cmd.run:
-    - name: echo "0 2 * * * mysqldump --no-tablespaces -u {{ data['dbuser_username'] }} -p"{{ data['dbuser_password'] }}" {{ data['database_name'] }} > /backup/kartaca_wordpressdb.sql" | crontab -
+    - name: echo "0 2 * * * mysqldump --no-tablespaces -u {{ data['dblocal_username'] }} -p"{{ data['dblocal_password'] }}" {{ data['database_name'] }} > /backup/kartaca_wordpressdb.sql" | crontab -
 
 {% endif %}
