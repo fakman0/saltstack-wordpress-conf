@@ -1,4 +1,4 @@
 base:
   '*':
     - mine
-    - kartaca-pillar
+    - pillar

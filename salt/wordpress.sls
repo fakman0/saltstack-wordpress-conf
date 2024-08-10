@@ -1,4 +1,4 @@
-{% set data = pillar.get('kartaca-pillar', {}) %}
+{% set data = pillar.get('pillar', {}) %}
 {% set ubuntu22ip = salt['mine.get']('ubuntu22', 'internal_ip_addrs') %}
 {% set centos9ip = salt['mine.get']('centos9', 'internal_ip_addrs') %}
 
@@ -8,18 +8,18 @@
 {#########################################}
 {#########################################}
 
-{# Creates the "kartaca_group" group with group id 2024. #}
-kartaca_group:
+{# Creates the "test_group" group with group id 2024. #}
+test_group:
   group.present:
     - gid: 2024
 
-{# Creates a user named Kartaca with user and group ID 2024, home directory /home/krt, default shell /bin/bash, password kartaca2024 and defines sudo authority. #}
+{# Creates a user named Test with user and group ID 2024, home directory /home/krt, default shell /bin/bash, password 123passwd and defines sudo authority. #}
 create_user:
   user.present:
-    - name: kartaca
+    - name: test
     - uid: 2024
     - gid: 2024
-    - password: {{ data['kartaca_password'] }}
+    - password: {{ data['password'] }}
     - hash_password: true
     - shell: /bin/bash
     - home: /home/krt
@@ -32,13 +32,13 @@ create_user:
      {% endif %}
 
 {# Defines the permission to use the package manager without a password. #}
-/etc/sudoers.d/kartaca_roles:
+/etc/sudoers.d/test_roles:
   file.managed:
-    - name: /etc/sudoers.d/kartaca_roles
+    - name: /etc/sudoers.d/test_roles
   {% if grains['id'] == 'centos9' %}
-    - contents: "kartaca ALL=(ALL) NOPASSWD: /usr/bin/yum"
+    - contents: "test ALL=(ALL) NOPASSWD: /usr/bin/yum"
   {% elif grains['id'] == 'ubuntu22' %}
-    - contents: "kartaca ALL=(ALL) NOPASSWD: /usr/bin/apt"
+    - contents: "test ALL=(ALL) NOPASSWD: /usr/bin/apt"
   {% endif %}
 
 {# Sets the time zone "Europe/Istanbul". #}
@@ -94,15 +94,15 @@ hashicorp_repo:
     - unless: 'which terraform'
 {% endif %}
 
-{# Assigns the address "kartaca.local" to all addresses at the IP address "192.168.168.128/28" in the host file. #}
+{# Assigns the address "wp.local" to all addresses at the IP address "192.168.168.128/28" in the host file. #}
 update_hosts_file:
   file.append:
     - name: /etc/hosts
     - text: |
         {% for i in range(1, 16) %}
-        192.168.168.{{ (i-1) | int + 129 }} kartaca.local
+        192.168.168.{{ (i-1) | int + 129 }} wp.local
         {% endfor %}
-    - unless: salt '*' file.grep text="192.168.168.129 kartaca.local"
+    - unless: salt '*' file.grep text="192.168.168.129 wp.local"
 
 {#########################################}
 {#########################################}
@@ -168,7 +168,7 @@ download_wordpress:
 create_ssl:
   cmd.run:
     - name: "mkdir /etc/nginx/ssl &&
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/nginx.key -out /etc/nginx/ssl/nginx.crt -subj '/C=TR/ST=Istanbul/L=Istanbul/O=Kartaca/OU=IT Department/CN=www.example.com'"
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/nginx.key -out /etc/nginx/ssl/nginx.crt -subj '/C=TR/ST=Istanbul/L=Istanbul/O=test/OU=IT Department/CN=www.example.com'"
     - unless: test -e /etc/nginx/ssl
 
 {# Copies the "wordpress2024.conf" file to the minion. #}
@@ -290,6 +290,6 @@ create_backup_dir:
 {# It creates a cron task that takes a mysql backup every night at 2am. #}
 create_cron:
   cmd.run:
-    - name: echo "0 2 * * * mysqldump --no-tablespaces -u {{ data['dblocal_username'] }} -p"{{ data['dblocal_password'] }}" {{ data['database_name'] }} > /backup/kartaca_wordpressdb.sql" | crontab -
+    - name: echo "0 2 * * * mysqldump --no-tablespaces -u {{ data['dblocal_username'] }} -p"{{ data['dblocal_password'] }}" {{ data['database_name'] }} > /backup/salt_wordpressdb.sql" | crontab -
 
 {% endif %}

@@ -45,5 +45,5 @@ ubuntu22:
 
 #### You are ready to start the configuration.
 ```
-salt "*" state.sls kartaca-wordpress
+salt "*" state.sls wordpress
 ```
